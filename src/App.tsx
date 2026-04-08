@@ -3,7 +3,7 @@ import reactLogo from "./assets/react.svg";
 import { invoke } from "@tauri-apps/api/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Titlebar } from "@/components/titlebar";
+import { AppLayout } from "@/components/app-layout";
 
 function App() {
   const [greetMsg, setGreetMsg] = useState("");
@@ -15,9 +15,8 @@ function App() {
   }
 
   return (
-    <main className="min-h-dvh bg-background text-foreground">
-      <Titlebar />
-      <div className="mx-auto flex max-w-2xl flex-col items-center gap-6 px-6 py-12 pt-16 text-center">
+    <AppLayout>
+      <div className="mx-auto flex max-w-2xl flex-col items-center gap-6 px-6 py-12 text-center">
         <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
           Welcome to Tauri + React
         </h1>
@@ -73,7 +72,7 @@ function App() {
           </p>
         )}
       </div>
-    </main>
+    </AppLayout>
   );
 }
 

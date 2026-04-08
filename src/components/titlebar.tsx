@@ -8,6 +8,7 @@ import {
 import { useTheme } from "next-themes";
 
 import { Button } from "@/components/ui/button";
+import { useSidebar } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -17,6 +18,7 @@ type Props = {
 
 export function Titlebar({ title = "Boson", className }: Props) {
   const { theme, resolvedTheme, setTheme } = useTheme();
+  const { toggleSidebar } = useSidebar();
 
   return (
     <div
@@ -53,6 +55,7 @@ export function Titlebar({ title = "Boson", className }: Props) {
           size="icon-sm"
           className="rounded-md"
           aria-label="Toggle left sidebar"
+          onClick={toggleSidebar}
         >
           <IconLayoutSidebarLeftExpand className="size-4" />
         </Button>
