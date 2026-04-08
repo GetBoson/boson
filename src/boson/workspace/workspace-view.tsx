@@ -10,12 +10,12 @@ import { RecordTabView } from "@/boson/workspace/views/record-tab";
 import { RightInspector } from "@/boson/workspace/views/right-inspector";
 
 export function WorkspaceView() {
-  const { tabs, activeTabId, setActiveTabId, closeTab, goBack, setSelection, inspectorOpen } =
+  const { tabs, activeTabId, activeTab, setActiveTabId, closeTab, goBack, setSelection, inspectorOpen } =
     useWorkspace();
-  const active = tabs.find((t) => t.id === activeTabId) ?? tabs[0];
+  const active = activeTab;
 
   // Keep inspector selection aligned to the active tab.
-  // (Users can still select within a tab; switching tabs re-syncs.)
+  // (Users can still select within a tab; any active-tab navigation re-syncs.)
   // This prevents “inspector drift” where selection doesn’t match what you’re looking at.
   React.useEffect(() => {
     if (!active) return;
@@ -23,7 +23,7 @@ export function WorkspaceView() {
     if (active.spec.kind === "table") setSelection({ kind: "table", table: active.spec.table });
     if (active.spec.kind === "record")
       setSelection({ kind: "record", table: active.spec.table, pk: active.spec.pk });
-  }, [activeTabId]); // intentionally only on tab switch
+  }, [activeTabId, active?.spec, setSelection]);
 
   return (
     <div className="flex h-[calc(100dvh-2.25rem)] min-h-0 w-full">

@@ -4,7 +4,8 @@ import { useWorkspace } from "@/boson/workspace/workspace-context";
 import { formatRowLabel, getRowByPk } from "@/boson/fake-domain";
 
 export function RightInspector() {
-  const { selection, domain, openTable, openRecord } = useWorkspace();
+  const { selection, domain, openTable, openRecord, navigateActive, openSchema, setSelection } =
+    useWorkspace();
 
   return (
     <div className="hidden h-full w-[340px] shrink-0 flex-col bg-background md:flex">
@@ -27,6 +28,21 @@ export function RightInspector() {
               <CardTitle className="text-sm">{selection.table}</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-2 text-xs">
+              <div className="text-muted-foreground">Relationships</div>
+              <Separator />
+              <div className="flex items-center justify-between font-mono">
+                <span>outgoing</span>
+                <span className="text-muted-foreground">
+                  {domain.foreignKeys.filter((f) => f.fromTable === selection.table).length}
+                </span>
+              </div>
+              <div className="flex items-center justify-between font-mono">
+                <span>incoming</span>
+                <span className="text-muted-foreground">
+                  {domain.foreignKeys.filter((f) => f.toTable === selection.table).length}
+                </span>
+              </div>
+              <Separator />
               <div className="text-muted-foreground">Columns</div>
               <Separator />
               {domain.tables[selection.table].columns.map((c) => (
@@ -43,6 +59,16 @@ export function RightInspector() {
               >
                 Open table tab
               </button>
+              <button
+                type="button"
+                className="text-left text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setSelection({ kind: "none" });
+                  openSchema();
+                }}
+              >
+                Open schema
+              </button>
             </CardContent>
           </Card>
         ) : null}
@@ -57,6 +83,8 @@ export function RightInspector() {
               <Separator />
               {(() => {
                 const row = getRowByPk(domain, selection.table, selection.pk);
+                const outgoing = domain.foreignKeys.filter((f) => f.fromTable === selection.table);
+                const incoming = domain.foreignKeys.filter((f) => f.toTable === selection.table);
                 return (
                   <div>
                     <div className="text-sm font-medium">
@@ -64,6 +92,16 @@ export function RightInspector() {
                     </div>
                     <div className="mt-1 font-mono text-[0.7rem] text-muted-foreground">
                       {domain.tables[selection.table].primaryKey}: {String(selection.pk)}
+                    </div>
+                    <div className="mt-2 grid gap-1 font-mono text-[0.7rem] text-muted-foreground">
+                      <div className="flex items-center justify-between">
+                        <span>outgoing_fks</span>
+                        <span>{outgoing.length}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span>incoming_fks</span>
+                        <span>{incoming.length}</span>
+                      </div>
                     </div>
                   </div>
                 );
@@ -75,6 +113,23 @@ export function RightInspector() {
                 onClick={() => openRecord(selection.table, selection.pk)}
               >
                 Open record tab
+              </button>
+              <button
+                type="button"
+                className="text-left text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => navigateActive({ kind: "table", table: selection.table })}
+              >
+                Jump to table (same tab)
+              </button>
+              <button
+                type="button"
+                className="text-left text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setSelection({ kind: "none" });
+                  openSchema();
+                }}
+              >
+                Open schema
               </button>
             </CardContent>
           </Card>

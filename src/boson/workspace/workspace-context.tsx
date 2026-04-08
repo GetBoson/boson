@@ -26,6 +26,7 @@ type Ctx = {
   domain: FakeDomain;
   tabs: WorkspaceTab[];
   activeTabId: string;
+  activeTab: WorkspaceTab | undefined;
   inspectorOpen: boolean;
   setInspectorOpen: (open: boolean) => void;
   toggleInspector: () => void;
@@ -34,6 +35,7 @@ type Ctx = {
   openSchema: (opts?: { newTab?: boolean }) => void;
   openTable: (table: TableName, opts?: { newTab?: boolean }) => void;
   openRecord: (table: TableName, pk: unknown, opts?: { newTab?: boolean }) => void;
+  navigateActive: (spec: TabSpec) => void;
   closeTab: (tabId: string) => void;
   setActiveTabId: (tabId: string) => void;
   goBack: (tabId: string) => void;
@@ -143,6 +145,22 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [open],
   );
 
+  // Opinionated navigation: replace the active tab’s spec (and push into its history).
+  // Used for “follow related record” flows to keep users oriented.
+  const navigateActive = React.useCallback(
+    (spec: TabSpec) => {
+      setTabs((prev) =>
+        prev.map((t) => {
+          if (t.id !== activeTabId) return t;
+          const last = t.history[t.history.length - 1];
+          const nextHistory = last && equalSpec(last, spec) ? t.history : [...t.history, spec];
+          return { ...t, spec, title: titleForSpec(spec), history: nextHistory };
+        }),
+      );
+    },
+    [activeTabId, setTabs],
+  );
+
   const goBack = React.useCallback(
     (tabId: string) => {
       setTabs((prev) =>
@@ -160,10 +178,16 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
 
   const toggleInspector = React.useCallback(() => setInspectorOpen((v) => !v), []);
 
+  const activeTab = React.useMemo(
+    () => tabs.find((t) => t.id === activeTabId) ?? tabs[0],
+    [activeTabId, tabs],
+  );
+
   const value: Ctx = {
     domain,
     tabs,
     activeTabId,
+    activeTab,
     inspectorOpen,
     setInspectorOpen,
     toggleInspector,
@@ -172,6 +196,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     openSchema,
     openTable,
     openRecord,
+    navigateActive,
     closeTab,
     setActiveTabId,
     goBack,

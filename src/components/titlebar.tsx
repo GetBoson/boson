@@ -9,6 +9,7 @@ import { useTheme } from "next-themes";
 
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
+import { useWorkspace } from "@/boson/workspace/workspace-context";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -19,6 +20,17 @@ type Props = {
 export function Titlebar({ title = "Boson", className }: Props) {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const { toggleSidebar } = useSidebar();
+  const { inspectorOpen, toggleInspector, activeTab } = useWorkspace();
+
+  const connectionLabel = "Demo: Acme Billing";
+  const tabLabel =
+    activeTab?.spec.kind === "schema"
+      ? "Schema"
+      : activeTab?.spec.kind === "table"
+        ? `Table · ${activeTab.spec.table}`
+        : activeTab?.spec.kind === "record"
+          ? `Record · ${activeTab.spec.table}`
+          : "Workspace";
 
   return (
     <div
@@ -28,7 +40,9 @@ export function Titlebar({ title = "Boson", className }: Props) {
         className,
       )}
     >
-      <div data-tauri-drag-region className="w-20 shrink-0" />
+      <div data-tauri-drag-region className="flex w-56 shrink-0 items-center gap-2">
+        <div className="text-xs text-muted-foreground">{connectionLabel}</div>
+      </div>
 
       <div
         data-tauri-drag-region
@@ -45,6 +59,8 @@ export function Titlebar({ title = "Boson", className }: Props) {
           <span data-tauri-drag-region className="truncate">
             {title}
           </span>
+          <span className="text-muted-foreground">·</span>
+          <span className="truncate text-xs text-muted-foreground">{tabLabel}</span>
         </div>
       </div>
 
@@ -65,8 +81,9 @@ export function Titlebar({ title = "Boson", className }: Props) {
           size="icon-sm"
           className="rounded-md"
           aria-label="Toggle right sidebar"
+          onClick={toggleInspector}
         >
-          <IconLayoutSidebarRightExpand className="size-4" />
+          <IconLayoutSidebarRightExpand className={cn("size-4", inspectorOpen ? "opacity-100" : "opacity-60")} />
         </Button>
 
         <div className="mx-1 h-4 w-px bg-border" />
