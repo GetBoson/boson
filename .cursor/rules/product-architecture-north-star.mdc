@@ -1,0 +1,48 @@
+---
+description: Product-first OSS DB workspace; registry-driven internals (phased)
+alwaysApply: true
+---
+
+# Boson: product + architecture north star
+
+## Product definition
+
+- Boson is an **open-source desktop database workspace** for developers.
+- The core job is: **help developers understand how relational data is connected**.
+- Optimize for **readability, safety, and trust**, not generic DB admin breadth.
+
+## Open source stance
+
+- Treat Boson as an **open-source, local-first** product by default.
+- Be explicit about any network access, telemetry, or remote services.
+- Default to workflows that feel safe for staging and production connections.
+
+## Architecture stance
+
+- Build as a **single app first** using Tauri + React.
+- Keep the architecture **registry-driven internally**, but do not expose a public plugin system yet.
+- Avoid building a marketplace, extension SDK, or platform surface before the core product proves useful.
+
+## Registry-driven internals
+
+Design new features as units that can become registered later:
+
+- **Connectors**: introspection, querying, capability metadata
+- **Panels**: schema explorer, record inspector, graph view, query view
+- **Renderers**: JSON, arrays, enums, timestamps, domain-specific entity views
+- **Actions**: contextual commands like copy value, open related record, expand neighbors, run query
+
+## Product phases
+
+- **Phase 1**: standalone desktop app, Postgres only, read-only, schema graph + record relationship traversal
+- **Phase 2**: internal registry for panels/renderers/connectors, still first-party only
+- **Phase 3**: public extension API and community registry, only after real user adoption
+
+## Decision checks
+
+Before major refactors, ask:
+
+- Are we shipping user-visible value this week, or just building scaffolding?
+- Can this stay monolithic for now while remaining registry-friendly later?
+- Does this keep the default experience simple, safe, and trustworthy for real databases?
+- Does this strengthen Boson’s core job: understanding connected relational data?

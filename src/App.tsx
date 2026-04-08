@@ -1,7 +1,8 @@
 import { useState } from "react";
 import reactLogo from "./assets/react.svg";
 import { invoke } from "@tauri-apps/api/core";
-import "./App.css";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 function App() {
   const [greetMsg, setGreetMsg] = useState("");
@@ -13,39 +14,63 @@ function App() {
   }
 
   return (
-    <main className="container">
-      <h1>
-        Welcome to Tauri + React, This will be a biggest db project of all time
-      </h1>
+    <main className="min-h-dvh bg-background text-foreground">
+      <div className="mx-auto flex max-w-2xl flex-col items-center gap-6 px-6 py-12 text-center">
+        <h1 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl">
+          Welcome to Tauri + React
+        </h1>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
+        <div className="flex items-center justify-center gap-6">
+          <a href="https://vite.dev" target="_blank" rel="noreferrer">
+            <img
+              src="/vite.svg"
+              className="h-16 w-16 transition hover:opacity-90"
+              alt="Vite logo"
+            />
+          </a>
+          <a href="https://tauri.app" target="_blank" rel="noreferrer">
+            <img
+              src="/tauri.svg"
+              className="h-16 w-16 transition hover:opacity-90"
+              alt="Tauri logo"
+            />
+          </a>
+          <a href="https://react.dev" target="_blank" rel="noreferrer">
+            <img
+              src={reactLogo}
+              className="h-16 w-16 transition hover:opacity-90"
+              alt="React logo"
+            />
+          </a>
+        </div>
+
+        <p className="text-sm text-muted-foreground">
+          shadcn/ui + Tailwind v4 are now installed.
+        </p>
 
       <form
-        className="row"
+        className="flex w-full max-w-sm items-center gap-2"
         onSubmit={(e) => {
           e.preventDefault();
           greet();
         }}
       >
-        <input
-          id="greet-input"
+        <Input
+          value={name}
           onChange={(e) => setName(e.currentTarget.value)}
           placeholder="Enter a name..."
         />
-        <button type="submit">Greet</button>
+        <Button type="submit">Greet</Button>
       </form>
-      <p>{greetMsg}</p>
+
+        {greetMsg ? (
+          <p className="text-sm text-foreground">{greetMsg}</p>
+        ) : (
+          <p className="text-sm text-muted-foreground">
+            Enter a name and click Greet.
+          </p>
+        )}
+      </div>
     </main>
   );
 }
