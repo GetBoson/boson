@@ -2,6 +2,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useWorkspace } from "@/boson/workspace/workspace-context";
 import { formatRowLabel, getRowByPk } from "@/boson/fake-domain";
+import type { TableName } from "@/boson/fake-domain";
 
 export function RightInspector() {
   const { selection, domain, openTable, openRecord, navigateActive, openSchema, setSelection } =
@@ -42,6 +43,35 @@ export function RightInspector() {
                   {domain.foreignKeys.filter((f) => f.toTable === selection.table).length}
                 </span>
               </div>
+              <Separator />
+              <div className="text-muted-foreground">Linked tables</div>
+              <Separator />
+              {(() => {
+                const out = domain.foreignKeys
+                  .filter((f) => f.fromTable === selection.table)
+                  .map((f) => f.toTable);
+                const inc = domain.foreignKeys
+                  .filter((f) => f.toTable === selection.table)
+                  .map((f) => f.fromTable);
+                const uniq = Array.from(new Set<TableName>([...out, ...inc] as TableName[]));
+                if (uniq.length === 0) {
+                  return <div className="text-xs text-muted-foreground">No linked tables.</div>;
+                }
+                return (
+                  <div className="grid gap-1">
+                    {uniq.map((t) => (
+                      <button
+                        key={t}
+                        type="button"
+                        className="text-left font-mono text-xs text-muted-foreground hover:text-foreground"
+                        onClick={() => openTable(t)}
+                      >
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                );
+              })()}
               <Separator />
               <div className="text-muted-foreground">Columns</div>
               <Separator />

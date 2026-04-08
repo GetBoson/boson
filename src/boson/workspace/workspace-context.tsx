@@ -27,6 +27,10 @@ type Ctx = {
   tabs: WorkspaceTab[];
   activeTabId: string;
   activeTab: WorkspaceTab | undefined;
+  commandPaletteOpen: boolean;
+  setCommandPaletteOpen: (open: boolean) => void;
+  openCommandPalette: () => void;
+  closeCommandPalette: () => void;
   inspectorOpen: boolean;
   setInspectorOpen: (open: boolean) => void;
   toggleInspector: () => void;
@@ -74,6 +78,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
   const [domain] = React.useState(() => createFakeDomain());
   const [selection, setSelection] = React.useState<Selection>({ kind: "none" });
   const [inspectorOpen, setInspectorOpen] = React.useState(true);
+  const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false);
 
   const [tabs, setTabs] = React.useState<WorkspaceTab[]>(() => {
     const spec: TabSpec = { kind: "schema" };
@@ -183,11 +188,18 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
     [activeTabId, tabs],
   );
 
+  const openCommandPalette = React.useCallback(() => setCommandPaletteOpen(true), []);
+  const closeCommandPalette = React.useCallback(() => setCommandPaletteOpen(false), []);
+
   const value: Ctx = {
     domain,
     tabs,
     activeTabId,
     activeTab,
+    commandPaletteOpen,
+    setCommandPaletteOpen,
+    openCommandPalette,
+    closeCommandPalette,
     inspectorOpen,
     setInspectorOpen,
     toggleInspector,

@@ -2,6 +2,7 @@ import {
   IconLayoutSidebarLeftExpand,
   IconLayoutSidebarRightExpand,
   IconMoon,
+  IconSearch,
   IconSquareDashed,
   IconSun,
 } from "@tabler/icons-react";
@@ -20,7 +21,7 @@ type Props = {
 export function Titlebar({ title = "Boson", className }: Props) {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const { toggleSidebar } = useSidebar();
-  const { inspectorOpen, toggleInspector, activeTab } = useWorkspace();
+  const { inspectorOpen, toggleInspector, activeTab, openCommandPalette } = useWorkspace();
 
   const connectionLabel = "Demo: Acme Billing";
   const tabLabel =
@@ -40,7 +41,10 @@ export function Titlebar({ title = "Boson", className }: Props) {
         className,
       )}
     >
-      <div data-tauri-drag-region className="flex w-56 shrink-0 items-center gap-2">
+      <div
+        data-tauri-drag-region
+        className="flex w-56 shrink-0 items-center gap-2 ml-18 mt-2"
+      >
         <div className="text-xs text-muted-foreground">{connectionLabel}</div>
       </div>
 
@@ -60,11 +64,24 @@ export function Titlebar({ title = "Boson", className }: Props) {
             {title}
           </span>
           <span className="text-muted-foreground">·</span>
-          <span className="truncate text-xs text-muted-foreground">{tabLabel}</span>
+          <span className="truncate text-xs text-muted-foreground">
+            {tabLabel}
+          </span>
         </div>
       </div>
 
       <div className="ml-auto flex items-center gap-1">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="rounded-md"
+          aria-label="Search"
+          title="Search (⌘/Ctrl+K)"
+          onClick={openCommandPalette}
+        >
+          <IconSearch className="size-4" />
+        </Button>
         <Button
           type="button"
           variant="ghost"
@@ -83,7 +100,12 @@ export function Titlebar({ title = "Boson", className }: Props) {
           aria-label="Toggle right sidebar"
           onClick={toggleInspector}
         >
-          <IconLayoutSidebarRightExpand className={cn("size-4", inspectorOpen ? "opacity-100" : "opacity-60")} />
+          <IconLayoutSidebarRightExpand
+            className={cn(
+              "size-4",
+              inspectorOpen ? "opacity-100" : "opacity-60",
+            )}
+          />
         </Button>
 
         <div className="mx-1 h-4 w-px bg-border" />
@@ -96,7 +118,9 @@ export function Titlebar({ title = "Boson", className }: Props) {
           aria-label="Toggle theme"
           onClick={() => {
             const current =
-              theme === "system" ? resolvedTheme ?? "light" : theme ?? "light";
+              theme === "system"
+                ? (resolvedTheme ?? "light")
+                : (theme ?? "light");
             setTheme(current === "dark" ? "light" : "dark");
           }}
         >

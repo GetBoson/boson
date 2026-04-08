@@ -1,9 +1,11 @@
 import * as React from "react";
 import {
   IconArrowUpRight,
+  IconArrowsLeftRight,
   IconCornerDownLeft,
   IconCornerUpRight,
   IconExternalLink,
+  IconList,
 } from "@tabler/icons-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +45,7 @@ export function RecordTabView({ table, pk }: { table: TableName; pk: unknown }) 
   const { domain, openRecord, openTable, navigateActive, setSelection } = useWorkspace();
   const row = getRowByPk(domain, table, pk);
   const schema = domain.tables[table];
+  const [viewMode, setViewMode] = React.useState<"list" | "trail">("list");
 
   const outgoing: Related[] = React.useMemo(() => {
     if (!row) return [];
@@ -121,6 +124,28 @@ export function RecordTabView({ table, pk }: { table: TableName; pk: unknown }) 
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          <div className="flex items-center rounded-md border bg-background p-0.5">
+            <Button
+              type="button"
+              variant={viewMode === "list" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => setViewMode("list")}
+            >
+              <IconList className="mr-2 size-4" />
+              List
+            </Button>
+            <Button
+              type="button"
+              variant={viewMode === "trail" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-7 px-2"
+              onClick={() => setViewMode("trail")}
+            >
+              <IconArrowsLeftRight className="mr-2 size-4" />
+              Trail
+            </Button>
+          </div>
           <Button type="button" variant="secondary" size="sm" onClick={() => openTable(table)}>
             Open table
           </Button>
@@ -137,51 +162,165 @@ export function RecordTabView({ table, pk }: { table: TableName; pk: unknown }) 
         </div>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
-        <Card>
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-sm">Fields</CardTitle>
-            <div className="text-xs text-muted-foreground">
-              Primary key <span className="font-mono">{schema.primaryKey}</span> anchors traversal.
-            </div>
-          </CardHeader>
-          <CardContent className="grid gap-2">
-            {schema.columns.map((c) => (
-              <div key={c.name} className="grid grid-cols-[160px_1fr] gap-3 text-xs">
-                <div className="font-mono text-muted-foreground">{c.name}</div>
-                <pre className="whitespace-pre-wrap break-words font-mono">{stringify(row[c.name])}</pre>
+      {viewMode === "trail" ? (
+        <RecordTrailView
+          center={{ table, pk, label: recordLabel }}
+          incoming={incoming}
+          outgoing={outgoing}
+          onOpen={(target, e) => {
+            setSelection({ kind: "record", table: target.table, pk: target.pk });
+            if (newTabIntent(e)) openRecord(target.table, target.pk, { newTab: true });
+            else navigateActive({ kind: "record", table: target.table, pk: target.pk });
+          }}
+        />
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-[1.3fr_1fr]">
+          <Card>
+            <CardHeader className="space-y-1">
+              <CardTitle className="text-sm">Fields</CardTitle>
+              <div className="text-xs text-muted-foreground">
+                Primary key <span className="font-mono">{schema.primaryKey}</span> anchors traversal.
               </div>
-            ))}
-          </CardContent>
-        </Card>
+            </CardHeader>
+            <CardContent className="grid gap-2">
+              {schema.columns.map((c) => (
+                <div key={c.name} className="grid grid-cols-[160px_1fr] gap-3 text-xs">
+                  <div className="font-mono text-muted-foreground">{c.name}</div>
+                  <pre className="whitespace-pre-wrap break-words font-mono">{stringify(row[c.name])}</pre>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
 
-        <div className="grid gap-4">
-          <RelationshipSection
-            title="Outgoing links"
-            icon={<IconCornerUpRight className="size-4 text-muted-foreground" />}
-            empty="No outgoing links from this record."
-            items={outgoing}
-            onOpen={(r, e) => {
-              setSelection({ kind: "record", table: r.table, pk: r.pk });
-              if (newTabIntent(e)) openRecord(r.table, r.pk, { newTab: true });
-              else navigateActive({ kind: "record", table: r.table, pk: r.pk });
-            }}
-          />
+          <div className="grid gap-4">
+            <RelationshipSection
+              title="Outgoing links"
+              icon={<IconCornerUpRight className="size-4 text-muted-foreground" />}
+              empty="No outgoing links from this record."
+              items={outgoing}
+              onOpen={(r, e) => {
+                setSelection({ kind: "record", table: r.table, pk: r.pk });
+                if (newTabIntent(e)) openRecord(r.table, r.pk, { newTab: true });
+                else navigateActive({ kind: "record", table: r.table, pk: r.pk });
+              }}
+            />
 
-          <RelationshipSection
-            title="Incoming links"
-            icon={<IconCornerDownLeft className="size-4 text-muted-foreground" />}
-            empty="No other rows reference this record."
-            items={incoming}
-            onOpen={(r, e) => {
-              setSelection({ kind: "record", table: r.table, pk: r.pk });
-              if (newTabIntent(e)) openRecord(r.table, r.pk, { newTab: true });
-              else navigateActive({ kind: "record", table: r.table, pk: r.pk });
-            }}
-          />
+            <RelationshipSection
+              title="Incoming links"
+              icon={<IconCornerDownLeft className="size-4 text-muted-foreground" />}
+              empty="No other rows reference this record."
+              items={incoming}
+              onOpen={(r, e) => {
+                setSelection({ kind: "record", table: r.table, pk: r.pk });
+                if (newTabIntent(e)) openRecord(r.table, r.pk, { newTab: true });
+                else navigateActive({ kind: "record", table: r.table, pk: r.pk });
+              }}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
+  );
+}
+
+function RecordTrailView({
+  center,
+  incoming,
+  outgoing,
+  onOpen,
+}: {
+  center: { table: TableName; pk: unknown; label: string };
+  incoming: Related[];
+  outgoing: Related[];
+  onOpen: (target: { table: TableName; pk: unknown }, e: React.MouseEvent<HTMLButtonElement>) => void;
+}) {
+  const { domain } = useWorkspace();
+
+  const left = incoming.slice(0, 8);
+  const right = outgoing.slice(0, 8);
+
+  return (
+    <Card>
+      <CardHeader className="space-y-1">
+        <CardTitle className="text-sm">Record trail</CardTitle>
+        <div className="text-xs text-muted-foreground">
+          Incoming on the left, outgoing on the right. <span className="font-mono">⌘/Ctrl</span>-click branches.
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="relative grid gap-4 overflow-x-auto rounded-md border bg-gradient-to-b from-muted/20 to-background p-4 lg:grid-cols-[1fr_260px_1fr]">
+          <div className="grid gap-2">
+            <div className="text-xs text-muted-foreground">Incoming</div>
+            {left.length === 0 ? (
+              <div className="text-xs text-muted-foreground">No incoming links.</div>
+            ) : (
+              left.map((r) => {
+                const schema = domain.tables[r.table];
+                const targetRow = getRowByPk(domain, r.table, r.pk);
+                const label = targetRow ? formatRowLabel(domain, r.table, targetRow) : `${r.table} (${String(r.pk)})`;
+                return (
+                  <button
+                    key={`in:${r.table}:${String(r.pk)}:${r.via ?? ""}`}
+                    type="button"
+                    className="rounded-md border bg-background px-3 py-2 text-left hover:bg-muted/60"
+                    onClick={(e) => onOpen({ table: r.table, pk: r.pk }, e)}
+                    title={r.via}
+                  >
+                    <div className="truncate text-sm font-medium">{label}</div>
+                    <div className="mt-0.5 truncate font-mono text-[0.7rem] text-muted-foreground">
+                      {schema.primaryKey}: {String(r.pk)}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          <div className="flex flex-col items-stretch justify-center">
+            <div className="rounded-lg border bg-background p-3 text-center">
+              <div className="text-xs text-muted-foreground">Current</div>
+              <div className="mt-1 truncate text-sm font-semibold">{center.label}</div>
+              <div className="mt-1 truncate font-mono text-[0.7rem] text-muted-foreground">
+                {center.table}: {String(center.pk)}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid gap-2">
+            <div className="text-xs text-muted-foreground">Outgoing</div>
+            {right.length === 0 ? (
+              <div className="text-xs text-muted-foreground">No outgoing links.</div>
+            ) : (
+              right.map((r) => {
+                const schema = domain.tables[r.table];
+                const targetRow = getRowByPk(domain, r.table, r.pk);
+                const label = targetRow ? formatRowLabel(domain, r.table, targetRow) : `${r.table} (${String(r.pk)})`;
+                return (
+                  <button
+                    key={`out:${r.table}:${String(r.pk)}:${r.via ?? ""}`}
+                    type="button"
+                    className="rounded-md border bg-background px-3 py-2 text-left hover:bg-muted/60"
+                    onClick={(e) => onOpen({ table: r.table, pk: r.pk }, e)}
+                    title={r.via}
+                  >
+                    <div className="truncate text-sm font-medium">{label}</div>
+                    <div className="mt-0.5 truncate font-mono text-[0.7rem] text-muted-foreground">
+                      {schema.primaryKey}: {String(r.pk)}
+                    </div>
+                  </button>
+                );
+              })
+            )}
+          </div>
+
+          {(incoming.length > left.length || outgoing.length > right.length) && (
+            <div className="lg:col-span-3 text-xs text-muted-foreground">
+              Showing the first {Math.max(left.length, right.length)} links per side. Use List view for the full set.
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
