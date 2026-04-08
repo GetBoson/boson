@@ -12,7 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "boson",
+        "title": "Boson",
+        "decorations": true,
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": { "x": 12, "y": 20 },
         "width": 800,
         "height": 600
       }

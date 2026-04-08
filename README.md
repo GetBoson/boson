@@ -1,8 +1,39 @@
 # boson
 
-# Tauri + React + Typescript
+Open-source, local-first desktop database workspace built with **Tauri 2 + React + Vite + TypeScript**.
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+## Development
+
+Install dependencies:
+
+```bash
+pnpm install
+```
+
+Run as a desktop app (recommended):
+
+```bash
+pnpm tauri dev
+```
+
+Run as a web app:
+
+```bash
+pnpm dev
+```
+
+Build:
+
+```bash
+pnpm build
+pnpm tauri build
+```
+
+## UI
+
+- **Tailwind CSS v4** + **shadcn/ui**
+- **Icons**: `@tabler/icons-react`
+- **Theme**: system by default; the titlebar toggle switches **light ↔ dark**
 
 ## Recommended IDE Setup
 
