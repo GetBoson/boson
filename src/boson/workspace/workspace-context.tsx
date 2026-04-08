@@ -29,6 +29,7 @@ export type WorkspaceTab = {
           op: "contains" | "equals" | "gt" | "lt" | "is_null" | "not_null";
           value?: string;
         }>;
+        preview?: { open: boolean; pk?: unknown } | null;
       }
     >;
   };

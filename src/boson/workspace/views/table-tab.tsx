@@ -15,6 +15,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { IconEye } from "@tabler/icons-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 function previewCell(v: unknown): string {
   if (v == null) return "—";
@@ -91,6 +102,9 @@ export function TableTabView({ table }: { table: TableName }) {
   const rowFilter = currentTableUi.rowFilter ?? "";
   const sort = currentTableUi.sort ?? null;
   const columnFilters = currentTableUi.columnFilters ?? [];
+  const preview = currentTableUi.preview ?? null;
+  const previewOpen = Boolean(preview?.open);
+  const previewPk = preview?.pk;
 
   const setCurrentTableUi = React.useCallback(
     (next: Partial<NonNullable<typeof currentTableUi>>) => {
@@ -126,6 +140,15 @@ export function TableTabView({ table }: { table: TableName }) {
     "contains",
   );
   const [draftFilterValue, setDraftFilterValue] = React.useState("");
+  const draftValueRef = React.useRef<HTMLInputElement | null>(null);
+
+  const copyText = React.useCallback(async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      window.prompt("Copy", text);
+    }
+  }, []);
 
   // If the table/columns change, ensure the draft column remains valid.
   React.useEffect(() => {
@@ -181,9 +204,51 @@ export function TableTabView({ table }: { table: TableName }) {
     return out;
   }, [columnFilters, rowFilter, rows, sort]);
 
+  const previewRow = React.useMemo(() => {
+    if (!previewOpen) return null;
+    if (!pkCol || previewPk == null) return null;
+    return rows.find((r) => r[pkCol] === previewPk) ?? null;
+  }, [pkCol, previewOpen, previewPk, rows]);
+
+  const previewFields = React.useMemo(() => {
+    if (!previewRow) return [];
+    const pkFirst: string[] = pkCol ? [pkCol] : [];
+    const rest = schema.columns
+      .map((c) => c.name)
+      .filter((n) => !pkFirst.includes(n))
+      .filter((n) => previewRow[n] != null);
+    const ordered = [...pkFirst, ...rest];
+    return ordered.slice(0, 14);
+  }, [pkCol, previewRow, schema.columns]);
+
   function isNewTabIntent(e: React.MouseEvent): boolean {
     return Boolean(e.metaKey || e.ctrlKey);
   }
+
+  const openFkTarget = React.useCallback(
+    (fk: (typeof outgoingFks)[number], v: unknown, e?: React.MouseEvent) => {
+      const targetSchema = domain.tables[fk.toTable];
+      const canOpenRecord =
+        !!targetSchema?.primaryKey && targetSchema.primaryKey === fk.toColumn && v != null;
+
+      if (canOpenRecord) {
+        setSelection({ kind: "record", table: fk.toTable, pk: v });
+        if (e && isNewTabIntent(e)) openRecord(fk.toTable, v, { newTab: true });
+        else navigateActive({ kind: "record", table: fk.toTable, pk: v });
+        return;
+      }
+
+      // Fallback: open the target table and pre-apply an equals filter on the destination column.
+      setSelection({ kind: "table", table: fk.toTable });
+      navigateActive({ kind: "table", table: fk.toTable });
+      setTableUiFor(fk.toTable, {
+        columnFilters: [{ column: fk.toColumn, op: "equals", value: String(v) }],
+        rowFilter: "",
+        sort: null,
+      });
+    },
+    [domain.tables, navigateActive, openRecord, outgoingFks, setSelection, setTableUiFor],
+  );
 
   React.useEffect(() => {
     let cancelled = false;
@@ -200,6 +265,7 @@ export function TableTabView({ table }: { table: TableName }) {
 
   return (
     <div className="p-4">
+      <TooltipProvider delay={200}>
       <Card className="overflow-hidden bg-data/30">
         <CardHeader className="space-y-2 pb-3">
           <CardTitle className="flex items-start justify-between gap-3">
@@ -332,6 +398,9 @@ export function TableTabView({ table }: { table: TableName }) {
 
                 {draftFilterOp === "is_null" || draftFilterOp === "not_null" ? null : (
                   <Input
+                    ref={(el) => {
+                      draftValueRef.current = el;
+                    }}
                     value={draftFilterValue}
                     onChange={(e) => setDraftFilterValue(e.currentTarget.value)}
                     placeholder="value"
@@ -441,33 +510,129 @@ export function TableTabView({ table }: { table: TableName }) {
                         fkColumns.has(c) ? "bg-muted/20" : "",
                       )}
                     >
-                      <button
-                        type="button"
-                        className="flex w-full items-center gap-2 text-left hover:text-foreground"
-                        onClick={() => {
-                          const current = sort?.column === c ? sort.direction : null;
-                          const nextDir = current === "asc" ? "desc" : current === "desc" ? null : "asc";
-                          setCurrentTableUi({ sort: nextDir ? { column: c, direction: nextDir } : null });
-                        }}
-                        title="Sort"
-                      >
-                        <span>{c}</span>
-                        {sort?.column === c ? (
-                          <span className="text-muted-foreground">{sort.direction === "asc" ? "▲" : "▼"}</span>
-                        ) : null}
-                        {c === pkCol ? (
-                          <span className="rounded bg-foreground/5 px-1 py-0.5 text-[0.6rem] text-muted-foreground">
-                            PK
-                          </span>
-                        ) : null}
-                        {fkColumns.has(c) ? (
-                          <span className="rounded bg-foreground/5 px-1 py-0.5 text-[0.6rem] text-muted-foreground">
-                            FK
-                          </span>
-                        ) : null}
-                      </button>
+                      <Tooltip>
+                        <TooltipTrigger
+                          render={
+                            <div className="group flex w-full items-center justify-between gap-2">
+                              <button
+                                type="button"
+                                className="flex min-w-0 flex-1 items-center gap-2 text-left hover:text-foreground"
+                                onClick={() => {
+                                  const current = sort?.column === c ? sort.direction : null;
+                                  const nextDir = current === "asc" ? "desc" : current === "desc" ? null : "asc";
+                                  setCurrentTableUi({ sort: nextDir ? { column: c, direction: nextDir } : null });
+                                }}
+                                title="Sort"
+                              >
+                                <span className="truncate">{c}</span>
+                                {sort?.column === c ? (
+                                  <span className="text-muted-foreground">{sort.direction === "asc" ? "▲" : "▼"}</span>
+                                ) : null}
+                                {c === pkCol ? (
+                                  <span className="rounded bg-foreground/5 px-1 py-0.5 text-[0.6rem] text-muted-foreground">
+                                    PK
+                                  </span>
+                                ) : null}
+                                {fkColumns.has(c) ? (
+                                  <span className="rounded bg-foreground/5 px-1 py-0.5 text-[0.6rem] text-muted-foreground">
+                                    FK
+                                  </span>
+                                ) : null}
+                              </button>
+
+                              <DropdownMenu>
+                                <DropdownMenuTrigger
+                                  render={
+                                    <button
+                                      type="button"
+                                      className="rounded px-1 py-0.5 text-muted-foreground opacity-0 hover:bg-muted/40 group-hover:opacity-100"
+                                      aria-label="Column actions"
+                                      title="Column actions"
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
+                                      }}
+                                    >
+                                      ⋯
+                                    </button>
+                                  }
+                                />
+                                <DropdownMenuContent align="end" side="bottom" sideOffset={6} className="w-56">
+                                  <DropdownMenuLabel className="font-mono text-xs">{c}</DropdownMenuLabel>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onSelect={async () => {
+                                      await copyText(c);
+                                    }}
+                                  >
+                                    Copy column name
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onSelect={async () => {
+                                      await copyText(`${table}.${c}`);
+                                    }}
+                                  >
+                                    Copy table.column
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onSelect={() => {
+                                      setDraftFilterCol(c);
+                                      setDraftFilterOp("contains");
+                                      setTimeout(() => draftValueRef.current?.focus(), 0);
+                                    }}
+                                  >
+                                    Start filter on this column
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    onSelect={() => setCurrentTableUi({ sort: { column: c, direction: "asc" } })}
+                                  >
+                                    Sort ascending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onSelect={() => setCurrentTableUi({ sort: { column: c, direction: "desc" } })}
+                                  >
+                                    Sort descending
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onSelect={() => setCurrentTableUi({ sort: null })}>
+                                    Clear sort
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            </div>
+                          }
+                        />
+                        <TooltipContent className="items-start">
+                          {(() => {
+                            const col = schema.columns.find((x) => x.name === c);
+                            const fk = fkByColumn.get(c);
+                            return (
+                              <div className="grid gap-1">
+                                <div className="font-mono text-[0.7rem]">{c}</div>
+                                {col ? (
+                                  <div className="text-[0.7rem] text-background/80">
+                                    <span className="font-mono">{col.type}</span>
+                                    <span className="px-1">·</span>
+                                    <span>{col.nullable ? "nullable" : "not null"}</span>
+                                  </div>
+                                ) : null}
+                                <div className="text-[0.7rem] text-background/80">
+                                  {c === pkCol ? <span className="mr-2">PK</span> : null}
+                                  {fk ? (
+                                    <span>
+                                      FK → <span className="font-mono">{fk.toTable}</span>.<span className="font-mono">{fk.toColumn}</span>
+                                    </span>
+                                  ) : null}
+                                </div>
+                              </div>
+                            );
+                          })()}
+                        </TooltipContent>
+                      </Tooltip>
                     </TableHead>
                   ))}
+                  <TableHead className="w-[44px] text-right text-[0.7rem] text-muted-foreground" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -497,54 +662,70 @@ export function TableTabView({ table }: { table: TableName }) {
                             fkColumns.has(c) ? "bg-muted/20" : "",
                           )}
                         >
-                          {fkColumns.has(c) && r[c] != null ? (
-                            <button
-                              type="button"
-                              className="w-full truncate text-left font-mono text-xs text-foreground underline decoration-border/60 underline-offset-2 hover:decoration-foreground/40"
-                              title={
-                                fkByColumn.get(c)
-                                  ? `Open related: ${fkByColumn.get(c)!.toTable}.${fkByColumn.get(c)!.toColumn}`
-                                  : "Open related"
-                              }
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                const fk = fkByColumn.get(c);
-                                if (!fk) return;
-                                const v = r[c];
-                                const targetSchema = domain.tables[fk.toTable];
-                                const canOpenRecord =
-                                  !!targetSchema?.primaryKey &&
-                                  targetSchema.primaryKey === fk.toColumn &&
-                                  v != null;
-
-                                if (canOpenRecord) {
-                                  setSelection({ kind: "record", table: fk.toTable, pk: v });
-                                  if (isNewTabIntent(e)) openRecord(fk.toTable, v, { newTab: true });
-                                  else navigateActive({ kind: "record", table: fk.toTable, pk: v });
-                                  return;
-                                }
-
-                                // Fallback: open the target table and pre-apply an equals filter on the FK target column.
-                                setSelection({ kind: "table", table: fk.toTable });
-                                navigateActive({ kind: "table", table: fk.toTable });
-                                setTableUiFor(fk.toTable, {
-                                  columnFilters: [{ column: fk.toColumn, op: "equals", value: String(v) }],
-                                  rowFilter: "",
-                                  sort: null,
-                                });
-                              }}
-                            >
-                              {previewCell(r[c])}
-                              <span className="ml-2 text-[0.7rem] text-muted-foreground">
-                                ↗
-                              </span>
-                            </button>
-                          ) : (
-                            <span className="text-foreground">{previewCell(r[c])}</span>
-                          )}
+                          {(() => {
+                            const fk = fkByColumn.get(c);
+                            const v = r[c];
+                            if (fk && v != null) {
+                              const targetSchema = domain.tables[fk.toTable];
+                              const kind =
+                                !!targetSchema?.primaryKey && targetSchema.primaryKey === fk.toColumn
+                                  ? "record"
+                                  : "table+filter";
+                              return (
+                                <Tooltip>
+                                  <TooltipTrigger
+                                    render={
+                                      <button
+                                        type="button"
+                                        className="w-full truncate text-left font-mono text-xs text-foreground underline decoration-border/60 underline-offset-2 hover:decoration-foreground/40"
+                                        title="Open related"
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          openFkTarget(fk, v, e);
+                                        }}
+                                      >
+                                        {previewCell(v)}
+                                        <span className="ml-2 text-[0.7rem] text-muted-foreground">↗</span>
+                                      </button>
+                                    }
+                                  />
+                                  <TooltipContent className="items-start">
+                                    <div className="grid gap-1">
+                                      <div className="text-[0.7rem] text-background/80">
+                                        → <span className="font-mono">{fk.toTable}</span>.
+                                        <span className="font-mono">{fk.toColumn}</span>
+                                      </div>
+                                      <div className="text-[0.7rem] text-background/80">
+                                        Opens <span className="font-mono">{kind}</span>
+                                      </div>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
+                              );
+                            }
+                            return <span className="text-foreground">{previewCell(v)}</span>;
+                          })()}
                         </TableCell>
                       ))}
+                      <TableCell className="w-[44px] text-right">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          className="h-7 w-7"
+                          disabled={!pkCol || pk == null}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!pkCol || pk == null) return;
+                            setCurrentTableUi({ preview: { open: true, pk } });
+                          }}
+                          title={pkCol ? "Quick preview" : "Preview requires a primary key (v1)"}
+                        >
+                          <IconEye className="size-4" />
+                        </Button>
+                      </TableCell>
                     </TableRow>
                   );
                 })}
@@ -553,6 +734,164 @@ export function TableTabView({ table }: { table: TableName }) {
           </div>
         </CardContent>
       </Card>
+      </TooltipProvider>
+
+      <Sheet
+        open={previewOpen}
+        onOpenChange={(open) => {
+          setCurrentTableUi({ preview: open ? { open: true, pk: previewPk } : { open: false, pk: previewPk } });
+        }}
+      >
+        <SheetContent side="right" className="sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>Row preview</SheetTitle>
+            <div className="text-xs text-muted-foreground">
+              <span className="font-mono">{table}</span>
+              {pkCol && previewPk != null ? (
+                <>
+                  <span className="px-1 text-muted-foreground">·</span>
+                  <span className="font-mono">{pkCol}</span>=<span className="font-mono">{String(previewPk)}</span>
+                </>
+              ) : null}
+            </div>
+          </SheetHeader>
+
+          <div className="min-h-0 flex-1 overflow-auto px-4">
+            {!previewRow ? (
+              <StatusCallout tone="empty" title="No preview available">
+                This preview needs a primary key and a loaded row.
+              </StatusCallout>
+            ) : (
+              <div className="grid gap-3">
+                <div className="rounded-md border bg-data/20 p-3">
+                  <div className="text-[0.7rem] text-muted-foreground">Fields</div>
+                  <div className="mt-2 grid gap-2">
+                    {previewFields.map((name) => (
+                      <div key={name} className="grid grid-cols-[140px_1fr] gap-3 text-xs">
+                        <div className="truncate font-mono text-muted-foreground">{name}</div>
+                        {(() => {
+                          const fk = fkByColumn.get(name);
+                          const v = previewRow[name];
+                          if (fk && v != null) {
+                            const targetSchema = domain.tables[fk.toTable];
+                            const kind =
+                              !!targetSchema?.primaryKey && targetSchema.primaryKey === fk.toColumn
+                                ? "record"
+                                : "table+filter";
+                            return (
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={
+                                    <button
+                                      type="button"
+                                      className="truncate text-left font-mono text-foreground underline decoration-border/60 underline-offset-2 hover:decoration-foreground/40"
+                                      onClick={(e) => openFkTarget(fk, v, e)}
+                                      title="Open related"
+                                    >
+                                      {previewCell(v)}
+                                      <span className="ml-2 text-[0.7rem] text-muted-foreground">↗</span>
+                                    </button>
+                                  }
+                                />
+                                <TooltipContent className="items-start">
+                                  <div className="grid gap-1">
+                                    <div className="text-[0.7rem] text-background/80">
+                                      → <span className="font-mono">{fk.toTable}</span>.
+                                      <span className="font-mono">{fk.toColumn}</span>
+                                    </div>
+                                    <div className="text-[0.7rem] text-background/80">
+                                      Opens <span className="font-mono">{kind}</span>
+                                    </div>
+                                  </div>
+                                </TooltipContent>
+                              </Tooltip>
+                            );
+                          }
+                          return <div className="truncate font-mono text-foreground">{previewCell(v)}</div>;
+                        })()}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {outgoingFks.length ? (
+                  <div className="rounded-md border bg-data/20 p-3">
+                    <div className="text-[0.7rem] text-muted-foreground">Outgoing links</div>
+                    <div className="mt-2 grid gap-1">
+                      {outgoingFks.slice(0, 8).map((fk) => {
+                        const v = previewRow[fk.fromColumn];
+                        if (v == null) return null;
+                        const targetSchema = domain.tables[fk.toTable];
+                        const kind =
+                          !!targetSchema?.primaryKey && targetSchema.primaryKey === fk.toColumn
+                            ? "record"
+                            : "table+filter";
+                        return (
+                          <Tooltip key={fk.name}>
+                            <TooltipTrigger
+                              render={
+                                <button
+                                  type="button"
+                                  className="rounded-md border bg-background/20 px-2 py-1 text-left text-xs hover:bg-muted/40"
+                                  onClick={(e) => openFkTarget(fk, v, e)}
+                                  title="Open related"
+                                >
+                                  <span className="font-mono">{fk.fromColumn}</span>{" "}
+                                  <span className="text-muted-foreground">→</span>{" "}
+                                  <span className="font-mono">{fk.toTable}</span>.
+                                  <span className="font-mono">{fk.toColumn}</span>
+                                </button>
+                              }
+                            />
+                            <TooltipContent className="items-start">
+                              <div className="grid gap-1">
+                                <div className="text-[0.7rem] text-background/80">
+                                  → <span className="font-mono">{fk.toTable}</span>.
+                                  <span className="font-mono">{fk.toColumn}</span>
+                                </div>
+                                <div className="text-[0.7rem] text-background/80">
+                                  Opens <span className="font-mono">{kind}</span>
+                                </div>
+                              </div>
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+
+          <SheetFooter>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!pkCol || previewPk == null}
+              onClick={() => {
+                if (!pkCol || previewPk == null) return;
+                setSelection({ kind: "record", table, pk: previewPk });
+                navigateActive({ kind: "record", table, pk: previewPk });
+              }}
+            >
+              Open record
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!pkCol || previewPk == null}
+              onClick={() => {
+                if (!pkCol || previewPk == null) return;
+                setSelection({ kind: "record", table, pk: previewPk });
+                openRecord(table, previewPk, { newTab: true });
+              }}
+            >
+              Open in new tab
+            </Button>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
