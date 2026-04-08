@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useWorkspace } from "@/boson/workspace/workspace-context";
+import { StatusCallout } from "@/boson/status-callout";
 import { formatRowLabel, getRowByPk } from "@/boson/fake-domain";
 import type { TableName } from "@/boson/fake-domain";
 
@@ -22,14 +23,9 @@ export function RightInspector() {
       </div>
       <div className="min-h-0 flex-1 overflow-auto p-3">
         {selection.kind === "none" ? (
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">Select something to inspect</CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground">
-              Select a table or record to see relationships and quick actions.
-            </CardContent>
-          </Card>
+          <StatusCallout tone="info" title="Select something to inspect">
+            Select a table or record to see relationships and quick actions.
+          </StatusCallout>
         ) : null}
 
         {selection.kind === "table" ? (

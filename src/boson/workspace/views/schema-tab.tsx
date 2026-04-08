@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useWorkspace } from "@/boson/workspace/workspace-context";
+import { StatusCallout } from "@/boson/status-callout";
 import type { TableName } from "@/boson/fake-domain";
 
 export function SchemaTabView() {
@@ -76,9 +77,9 @@ export function SchemaTabView() {
         </CardHeader>
         <CardContent>
           {connection.status === "error" ? (
-            <div className="mb-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+            <StatusCallout tone="error" title="Connection error" className="mb-3">
               {connection.message}
-            </div>
+            </StatusCallout>
           ) : null}
           <div className="mb-3 flex items-center justify-between gap-2">
             <div className="text-xs text-muted-foreground">

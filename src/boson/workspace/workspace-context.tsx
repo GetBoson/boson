@@ -18,8 +18,19 @@ export type WorkspaceTab = {
   history: TabSpec[];
   ui?: {
     recordViewMode?: "list" | "trail";
-    tableRowLimit?: number;
-    tableRowFilter?: string;
+    tableUi?: Record<
+      TableName,
+      {
+        rowLimit?: number;
+        rowFilter?: string;
+        sort?: { column: string; direction: "asc" | "desc" } | null;
+        columnFilters?: Array<{
+          column: string;
+          op: "contains" | "equals" | "gt" | "lt" | "is_null" | "not_null";
+          value?: string;
+        }>;
+      }
+    >;
   };
 };
 

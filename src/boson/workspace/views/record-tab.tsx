@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { useWorkspace } from "@/boson/workspace/workspace-context";
+import { StatusCallout } from "@/boson/status-callout";
 import { formatRowLabel, getRowByPk, type Row, type TableName } from "@/boson/fake-domain";
 
 function stringify(v: unknown): string {
@@ -111,14 +112,9 @@ export function RecordTabView({ table, pk }: { table: TableName; pk: unknown }) 
   if (!schema) {
     return (
       <div className="p-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Table not found</CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground">
-            This tab references <span className="font-mono">{table}</span>, but it doesn’t exist in the current schema.
-          </CardContent>
-        </Card>
+        <StatusCallout tone="error" title="Table not found">
+          This tab references <span className="font-mono">{table}</span>, but it doesn’t exist in the current schema.
+        </StatusCallout>
       </div>
     );
   }
@@ -126,18 +122,12 @@ export function RecordTabView({ table, pk }: { table: TableName; pk: unknown }) 
   if (!schema.primaryKey) {
     return (
       <div className="p-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Unsupported table</CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground">
-            <div>
-              <span className="font-mono">{table}</span> doesn’t have a supported single-column primary key yet (v1
-              limitation).
-            </div>
-            <div className="mt-2">Record tabs require a primary key so Boson can anchor traversal and identity.</div>
-          </CardContent>
-        </Card>
+        <StatusCallout tone="empty" title="Unsupported table (v1 limitation)">
+          <div>
+            <span className="font-mono">{table}</span> doesn’t have a supported single-column primary key yet.
+          </div>
+          <div className="mt-1">Record tabs require a primary key so Boson can anchor traversal and identity.</div>
+        </StatusCallout>
       </div>
     );
   }
@@ -148,41 +138,32 @@ export function RecordTabView({ table, pk }: { table: TableName; pk: unknown }) 
       const err = recordError[rKey];
       return (
         <div className="p-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-sm">
-                {state === "loading" ? "Loading record…" : state === "error" ? "Load failed" : "Record not found"}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground">
-              {state === "loading" ? (
-                <>
-                  Fetching <span className="font-mono">{table}</span> by primary key{" "}
-                  <span className="font-mono">{schema.primaryKey}</span>.
-                </>
-              ) : state === "error" ? (
-                <span className="text-destructive">{err ?? "Failed to load record."}</span>
-              ) : (
-                <>
-                  No row matched <span className="font-mono">{schema.primaryKey}</span> ={" "}
-                  <span className="font-mono">{String(pk)}</span>.
-                </>
-              )}
-            </CardContent>
-          </Card>
+          <StatusCallout
+            tone={state === "error" ? "error" : state === "loading" ? "loading" : "empty"}
+            title={state === "loading" ? "Loading record…" : state === "error" ? "Load failed" : "Record not found"}
+          >
+            {state === "loading" ? (
+              <>
+                Fetching <span className="font-mono">{table}</span> by primary key{" "}
+                <span className="font-mono">{schema.primaryKey}</span>.
+              </>
+            ) : state === "error" ? (
+              <>{err ?? "Failed to load record."}</>
+            ) : (
+              <>
+                No row matched <span className="font-mono">{schema.primaryKey}</span> ={" "}
+                <span className="font-mono">{String(pk)}</span>.
+              </>
+            )}
+          </StatusCallout>
         </div>
       );
     }
     return (
       <div className="p-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Record not found</CardTitle>
-          </CardHeader>
-          <CardContent className="text-xs text-muted-foreground">
-            This is dummy data; the requested primary key wasn’t found.
-          </CardContent>
-        </Card>
+        <StatusCallout tone="empty" title="Record not found">
+          This is demo data; the requested primary key wasn’t found.
+        </StatusCallout>
       </div>
     );
   }

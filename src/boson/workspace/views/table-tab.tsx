@@ -7,6 +7,7 @@ import type { TableName } from "@/boson/fake-domain";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { StatusCallout } from "@/boson/status-callout";
 import {
   Select,
   SelectContent,
@@ -25,6 +26,17 @@ function previewCell(v: unknown): string {
   } catch {
     return String(v);
   }
+}
+
+function compareValues(a: unknown, b: unknown): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1;
+  if (b == null) return -1;
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  if (typeof a === "boolean" && typeof b === "boolean") return Number(a) - Number(b);
+  const sa = typeof a === "string" ? a : JSON.stringify(a);
+  const sb = typeof b === "string" ? b : JSON.stringify(b);
+  return sa.localeCompare(sb);
 }
 
 export function TableTabView({ table }: { table: TableName }) {
@@ -64,21 +76,110 @@ export function TableTabView({ table }: { table: TableName }) {
   const outgoingFks = domain.foreignKeys.filter((f) => f.fromTable === table);
   const incomingFks = domain.foreignKeys.filter((f) => f.toTable === table);
   const fkColumns = new Set(outgoingFks.map((f) => f.fromColumn));
+  const fkByColumn = React.useMemo(() => {
+    const m = new Map<string, (typeof outgoingFks)[number]>();
+    for (const fk of outgoingFks) {
+      // v1: if multiple FKs share a column, keep the first.
+      if (!m.has(fk.fromColumn)) m.set(fk.fromColumn, fk);
+    }
+    return m;
+  }, [outgoingFks]);
   const pkCol = schema.primaryKey;
-  const rowLimit = String(activeTab?.ui?.tableRowLimit ?? 50);
-  const rowFilter = activeTab?.ui?.tableRowFilter ?? "";
+  const tableUiMap = activeTab?.ui?.tableUi ?? {};
+  const currentTableUi = tableUiMap[table] ?? {};
+  const rowLimit = String(currentTableUi.rowLimit ?? 50);
+  const rowFilter = currentTableUi.rowFilter ?? "";
+  const sort = currentTableUi.sort ?? null;
+  const columnFilters = currentTableUi.columnFilters ?? [];
+
+  const setCurrentTableUi = React.useCallback(
+    (next: Partial<NonNullable<typeof currentTableUi>>) => {
+      const nextForTable = { ...(tableUiMap[table] ?? {}), ...next };
+      setTabUi(activeTabId, {
+        tableUi: {
+          ...tableUiMap,
+          [table]: nextForTable,
+        },
+      });
+    },
+    [activeTabId, setTabUi, table, tableUiMap],
+  );
+
+  const setTableUiFor = React.useCallback(
+    (
+      t: TableName,
+      next: Partial<NonNullable<NonNullable<typeof tableUiMap>[TableName]>>,
+    ) => {
+      const prev = (tableUiMap as Record<TableName, any>)[t] ?? {};
+      setTabUi(activeTabId, {
+        tableUi: {
+          ...tableUiMap,
+          [t]: { ...prev, ...next },
+        },
+      });
+    },
+    [activeTabId, setTabUi, tableUiMap],
+  );
+
+  const [draftFilterCol, setDraftFilterCol] = React.useState<string>(() => cols[0] ?? "");
+  const [draftFilterOp, setDraftFilterOp] = React.useState<"contains" | "equals" | "gt" | "lt" | "is_null" | "not_null">(
+    "contains",
+  );
+  const [draftFilterValue, setDraftFilterValue] = React.useState("");
+
+  // If the table/columns change, ensure the draft column remains valid.
+  React.useEffect(() => {
+    if (!cols.length) {
+      if (draftFilterCol) setDraftFilterCol("");
+      return;
+    }
+    if (!draftFilterCol || !cols.includes(draftFilterCol)) {
+      setDraftFilterCol(cols[0]!);
+      setDraftFilterValue("");
+      setDraftFilterOp("contains");
+    }
+  }, [cols, draftFilterCol, table]);
 
   const filteredRows = React.useMemo(() => {
+    let out = rows;
+
+    // Column-aware filters first.
+    if (columnFilters.length) {
+      out = out.filter((r) => {
+        return columnFilters.every((f) => {
+          const v = r[f.column];
+          if (f.op === "is_null") return v == null;
+          if (f.op === "not_null") return v != null;
+          const needle = (f.value ?? "").toLowerCase();
+          if (f.op === "contains") return String(v ?? "").toLowerCase().includes(needle);
+          if (f.op === "equals") return String(v ?? "") === (f.value ?? "");
+          if (f.op === "gt") return Number(v) > Number(f.value);
+          if (f.op === "lt") return Number(v) < Number(f.value);
+          return true;
+        });
+      });
+    }
+
+    // Global text filter over loaded rows (fallback / quick scan).
     const q = rowFilter.trim().toLowerCase();
-    if (!q) return rows;
-    return rows.filter((r) => {
-      try {
-        return JSON.stringify(r).toLowerCase().includes(q);
-      } catch {
-        return false;
-      }
-    });
-  }, [rowFilter, rows]);
+    if (q) {
+      out = out.filter((r) => {
+        try {
+          return JSON.stringify(r).toLowerCase().includes(q);
+        } catch {
+          return false;
+        }
+      });
+    }
+
+    // Sorting (client-side on loaded rows).
+    if (sort?.column) {
+      const dir = sort.direction === "desc" ? -1 : 1;
+      out = [...out].sort((ra, rb) => dir * compareValues(ra[sort.column], rb[sort.column]));
+    }
+
+    return out;
+  }, [columnFilters, rowFilter, rows, sort]);
 
   function isNewTabIntent(e: React.MouseEvent): boolean {
     return Boolean(e.metaKey || e.ctrlKey);
@@ -137,7 +238,7 @@ export function TableTabView({ table }: { table: TableName }) {
                 value={rowLimit}
                 onValueChange={async (v) => {
                   if (!v) return;
-                  setTabUi(activeTabId, { tableRowLimit: Number(v) });
+                  setCurrentTableUi({ rowLimit: Number(v) });
                   if (connection.status !== "connected") return;
                   await fetchRowsForTable(table, Number(v));
                 }}
@@ -181,44 +282,151 @@ export function TableTabView({ table }: { table: TableName }) {
         <CardContent className="overflow-auto p-0">
           <div className="border-b bg-data/40">
             <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
-            <div className="flex min-w-0 flex-1 items-center gap-2">
-              <Input
-                value={rowFilter}
-                onChange={(e) => setTabUi(activeTabId, { tableRowFilter: e.currentTarget.value })}
-                placeholder="Filter loaded rows…"
-                className="h-8 max-w-md"
-              />
-              {rowFilter.trim() ? (
+              <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                <Input
+                  value={rowFilter}
+                  onChange={(e) => setCurrentTableUi({ rowFilter: e.currentTarget.value })}
+                  placeholder="Search loaded rows…"
+                  className="h-8 max-w-xs"
+                />
+                {rowFilter.trim() ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2"
+                    onClick={() => setCurrentTableUi({ rowFilter: "" })}
+                  >
+                    Clear
+                  </Button>
+                ) : null}
+
+                <span className="mx-1 h-4 w-px bg-border" />
+
+                <Select value={draftFilterCol} onValueChange={(v) => setDraftFilterCol(v ?? "")}>
+                  <SelectTrigger size="sm" className="h-8 font-mono text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cols.map((c) => (
+                      <SelectItem key={c} value={c}>
+                        {c}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={draftFilterOp} onValueChange={(v) => setDraftFilterOp((v as any) ?? "contains")}>
+                  <SelectTrigger size="sm" className="h-8 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="contains">contains</SelectItem>
+                    <SelectItem value="equals">equals</SelectItem>
+                    <SelectItem value="gt">{">"}</SelectItem>
+                    <SelectItem value="lt">{"<"}</SelectItem>
+                    <SelectItem value="is_null">is null</SelectItem>
+                    <SelectItem value="not_null">not null</SelectItem>
+                  </SelectContent>
+                </Select>
+
+                {draftFilterOp === "is_null" || draftFilterOp === "not_null" ? null : (
+                  <Input
+                    value={draftFilterValue}
+                    onChange={(e) => setDraftFilterValue(e.currentTarget.value)}
+                    placeholder="value"
+                    className="h-8 w-[160px] font-mono text-xs"
+                  />
+                )}
+
                 <Button
                   type="button"
-                  variant="ghost"
+                  variant="secondary"
                   size="sm"
-                  className="h-7 px-2"
-                  onClick={() => setTabUi(activeTabId, { tableRowFilter: "" })}
+                  className="h-8"
+                  onClick={() => {
+                    if (!draftFilterCol) return;
+                    const next = [
+                      ...columnFilters,
+                      {
+                        column: draftFilterCol,
+                        op: draftFilterOp,
+                        value:
+                          draftFilterOp === "is_null" || draftFilterOp === "not_null"
+                            ? undefined
+                            : draftFilterValue,
+                      },
+                    ];
+                    setCurrentTableUi({ columnFilters: next });
+                    if (draftFilterOp !== "is_null" && draftFilterOp !== "not_null") setDraftFilterValue("");
+                  }}
                 >
-                  Clear
+                  Add filter
                 </Button>
-              ) : null}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              Showing <span className="font-mono">{filteredRows.length}</span> of{" "}
-              <span className="font-mono">{rows.length}</span>
-            </div>
+
+                {columnFilters.length ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-8"
+                    onClick={() => setCurrentTableUi({ columnFilters: [] })}
+                  >
+                    Clear filters
+                  </Button>
+                ) : null}
+              </div>
+
+              <div className="text-xs text-muted-foreground">
+                Showing <span className="font-mono">{filteredRows.length}</span> of{" "}
+                <span className="font-mono">{rows.length}</span>
+              </div>
           </div>
+
+            {columnFilters.length ? (
+              <div className="flex flex-wrap items-center gap-2 px-3 pb-2 text-xs text-muted-foreground">
+                {columnFilters.map((f, idx) => (
+                  <button
+                    key={`${f.column}:${f.op}:${String(f.value)}:${idx}`}
+                    type="button"
+                    className="rounded-md border bg-background/20 px-2 py-1 hover:bg-muted/40"
+                    onClick={() => {
+                      const next = columnFilters.filter((_, i) => i !== idx);
+                      setCurrentTableUi({ columnFilters: next });
+                    }}
+                    title="Remove filter"
+                  >
+                    <span className="font-mono">{f.column}</span> {f.op}
+                    {f.value != null ? <span className="font-mono"> {f.value}</span> : null}
+                    <span className="ml-2 text-muted-foreground">×</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
           </div>
-          {rows.length > 0 && rowFilter.trim() && filteredRows.length === 0 ? (
-            <div className="mx-3 mb-2 rounded-md border bg-muted/10 px-3 py-2 text-xs text-muted-foreground">
-              No matches for <span className="font-mono">{rowFilter.trim()}</span>.
-            </div>
+          {rows.length > 0 && filteredRows.length === 0 && (rowFilter.trim() || columnFilters.length > 0) ? (
+            <StatusCallout tone="empty" title="No matches" className="mx-3 mb-2">
+              {rowFilter.trim() ? (
+                <>
+                  No matches for <span className="font-mono">{rowFilter.trim()}</span>.
+                </>
+              ) : (
+                <>No rows match the current column filters.</>
+              )}
+            </StatusCallout>
           ) : null}
           {(tableRowsState[table] ?? "idle") === "loading" ? (
-            <div className="mx-3 mb-2 text-xs text-muted-foreground">Loading rows…</div>
+            <StatusCallout tone="loading" title="Loading rows…" className="mx-3 mb-2" />
           ) : null}
           {tableRowsError[table] ? (
-            <div className="mx-3 mb-2 text-xs text-destructive">Load failed: {tableRowsError[table]}</div>
+            <StatusCallout tone="error" title="Load failed" className="mx-3 mb-2">
+              {tableRowsError[table]}
+            </StatusCallout>
           ) : null}
           {(tableRowsState[table] ?? "idle") === "loaded" && rows.length === 0 ? (
-            <div className="mx-3 mb-2 text-xs text-muted-foreground">No rows (loaded).</div>
+            <StatusCallout tone="empty" title="No rows" className="mx-3 mb-2">
+              This table returned zero rows for the current limit.
+            </StatusCallout>
           ) : null}
           <div className="mx-3 mb-3 overflow-hidden rounded-md border bg-data/40">
             <Table>
@@ -233,8 +441,20 @@ export function TableTabView({ table }: { table: TableName }) {
                         fkColumns.has(c) ? "bg-muted/20" : "",
                       )}
                     >
-                      <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 text-left hover:text-foreground"
+                        onClick={() => {
+                          const current = sort?.column === c ? sort.direction : null;
+                          const nextDir = current === "asc" ? "desc" : current === "desc" ? null : "asc";
+                          setCurrentTableUi({ sort: nextDir ? { column: c, direction: nextDir } : null });
+                        }}
+                        title="Sort"
+                      >
                         <span>{c}</span>
+                        {sort?.column === c ? (
+                          <span className="text-muted-foreground">{sort.direction === "asc" ? "▲" : "▼"}</span>
+                        ) : null}
                         {c === pkCol ? (
                           <span className="rounded bg-foreground/5 px-1 py-0.5 text-[0.6rem] text-muted-foreground">
                             PK
@@ -245,7 +465,7 @@ export function TableTabView({ table }: { table: TableName }) {
                             FK
                           </span>
                         ) : null}
-                      </div>
+                      </button>
                     </TableHead>
                   ))}
                 </TableRow>
@@ -277,9 +497,52 @@ export function TableTabView({ table }: { table: TableName }) {
                             fkColumns.has(c) ? "bg-muted/20" : "",
                           )}
                         >
-                          <span className={cn(c === pkCol ? "text-foreground" : "text-foreground")}>
-                            {previewCell(r[c])}
-                          </span>
+                          {fkColumns.has(c) && r[c] != null ? (
+                            <button
+                              type="button"
+                              className="w-full truncate text-left font-mono text-xs text-foreground underline decoration-border/60 underline-offset-2 hover:decoration-foreground/40"
+                              title={
+                                fkByColumn.get(c)
+                                  ? `Open related: ${fkByColumn.get(c)!.toTable}.${fkByColumn.get(c)!.toColumn}`
+                                  : "Open related"
+                              }
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const fk = fkByColumn.get(c);
+                                if (!fk) return;
+                                const v = r[c];
+                                const targetSchema = domain.tables[fk.toTable];
+                                const canOpenRecord =
+                                  !!targetSchema?.primaryKey &&
+                                  targetSchema.primaryKey === fk.toColumn &&
+                                  v != null;
+
+                                if (canOpenRecord) {
+                                  setSelection({ kind: "record", table: fk.toTable, pk: v });
+                                  if (isNewTabIntent(e)) openRecord(fk.toTable, v, { newTab: true });
+                                  else navigateActive({ kind: "record", table: fk.toTable, pk: v });
+                                  return;
+                                }
+
+                                // Fallback: open the target table and pre-apply an equals filter on the FK target column.
+                                setSelection({ kind: "table", table: fk.toTable });
+                                navigateActive({ kind: "table", table: fk.toTable });
+                                setTableUiFor(fk.toTable, {
+                                  columnFilters: [{ column: fk.toColumn, op: "equals", value: String(v) }],
+                                  rowFilter: "",
+                                  sort: null,
+                                });
+                              }}
+                            >
+                              {previewCell(r[c])}
+                              <span className="ml-2 text-[0.7rem] text-muted-foreground">
+                                ↗
+                              </span>
+                            </button>
+                          ) : (
+                            <span className="text-foreground">{previewCell(r[c])}</span>
+                          )}
                         </TableCell>
                       ))}
                     </TableRow>
