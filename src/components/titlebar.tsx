@@ -11,6 +11,7 @@ import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { useSidebar } from "@/components/ui/sidebar";
 import { useWorkspace } from "@/boson/workspace/workspace-context";
+import { formatRowLabel, getRowByPk } from "@/boson/fake-domain";
 import { cn } from "@/lib/utils";
 
 type Props = {
@@ -21,31 +22,71 @@ type Props = {
 export function Titlebar({ title = "Boson", className }: Props) {
   const { theme, resolvedTheme, setTheme } = useTheme();
   const { toggleSidebar } = useSidebar();
-  const { inspectorOpen, toggleInspector, activeTab, openCommandPalette } = useWorkspace();
+  const { inspectorOpen, toggleInspector, activeTab, openCommandPalette, connection, openConnectDialog, domain } =
+    useWorkspace();
 
-  const connectionLabel = "Demo: Acme Billing";
+  const connectionLabel =
+    connection.status === "connected" || connection.status === "refreshing"
+      ? `${connection.database} (${connection.schema})`
+      : connection.status === "connecting"
+        ? "Connecting…"
+        : connection.status === "error"
+          ? "Connection error"
+          : "No connection";
+  const connectionSub =
+    connection.status === "connected" || connection.status === "refreshing"
+      ? "Postgres · Read only"
+      : connection.status === "error"
+        ? connection.message
+        : "Demo data";
   const tabLabel =
     activeTab?.spec.kind === "schema"
       ? "Schema"
       : activeTab?.spec.kind === "table"
-        ? `Table · ${activeTab.spec.table}`
+        ? `Table`
         : activeTab?.spec.kind === "record"
-          ? `Record · ${activeTab.spec.table}`
+          ? `Record`
           : "Workspace";
+  const tabContext =
+    activeTab?.spec.kind === "table"
+      ? activeTab.spec.table
+      : activeTab?.spec.kind === "record"
+        ? activeTab.spec.table
+        : activeTab?.spec.kind === "schema"
+          ? "Structure"
+          : "";
+  const recordSuffix =
+    activeTab?.spec.kind === "record"
+      ? (() => {
+          const row = getRowByPk(domain, activeTab.spec.table, activeTab.spec.pk);
+          const pkShort = String(activeTab.spec.pk).slice(0, 8);
+          return row ? formatRowLabel(domain, activeTab.spec.table, row) : `${pkShort}…`;
+        })()
+      : "";
 
   return (
     <div
       data-tauri-drag-region
       className={cn(
-        "fixed inset-x-0 top-0 z-50 flex h-9 items-center border-b bg-background/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-background/70",
+        "fixed inset-x-0 top-0 z-50 flex h-11 items-center border-b bg-sidebar/95 px-3 backdrop-blur supports-[backdrop-filter]:bg-sidebar/70",
         className,
       )}
     >
       <div
         data-tauri-drag-region
-        className="flex w-56 shrink-0 items-center gap-2 ml-18 mt-2"
+        className="flex w-72 shrink-0 items-center gap-2"
       >
-        <div className="text-xs text-muted-foreground">{connectionLabel}</div>
+        <div className="flex items-center gap-2 text-xs">
+          <button
+            type="button"
+            className="inline-flex items-center gap-2 rounded-md border bg-background/40 px-2.5 py-1 text-foreground/90 hover:bg-background/60"
+            onClick={openConnectDialog}
+            title="Connection settings"
+          >
+            {connectionLabel}
+          </button>
+          <span className="rounded bg-muted/40 px-2 py-1 text-muted-foreground">{connectionSub}</span>
+        </div>
       </div>
 
       <div
@@ -54,19 +95,32 @@ export function Titlebar({ title = "Boson", className }: Props) {
       >
         <div
           data-tauri-drag-region
-          className="pointer-events-auto flex min-w-0 items-center gap-2 text-sm font-medium"
+          className="pointer-events-auto flex min-w-0 items-center gap-2"
         >
           <IconSquareDashed
             data-tauri-drag-region
             className="size-4 text-muted-foreground"
           />
-          <span data-tauri-drag-region className="truncate">
-            {title}
-          </span>
-          <span className="text-muted-foreground">·</span>
-          <span className="truncate text-xs text-muted-foreground">
-            {tabLabel}
-          </span>
+          <div className="min-w-0">
+            <div data-tauri-drag-region className="truncate text-sm font-semibold tracking-tight">
+              {title}
+            </div>
+            <div className="mt-0.5 truncate text-[0.7rem] text-muted-foreground">
+              <span className="font-medium text-foreground/80">{tabLabel}</span>
+              {tabContext ? (
+                <>
+                  <span className="px-1 text-muted-foreground">·</span>
+                  <span className="font-mono">{tabContext}</span>
+                </>
+              ) : null}
+              {recordSuffix ? (
+                <>
+                  <span className="px-1 text-muted-foreground">·</span>
+                  <span className="truncate text-foreground/80">{recordSuffix}</span>
+                </>
+              ) : null}
+            </div>
+          </div>
         </div>
       </div>
 

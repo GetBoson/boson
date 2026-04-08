@@ -1,5 +1,5 @@
 import * as React from "react";
-import { IconChevronLeft, IconX } from "@tabler/icons-react";
+import { IconChevronLeft, IconFileText, IconGraph, IconTable, IconX } from "@tabler/icons-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -8,9 +8,10 @@ import { SchemaTabView } from "@/boson/workspace/views/schema-tab";
 import { TableTabView } from "@/boson/workspace/views/table-tab";
 import { RecordTabView } from "@/boson/workspace/views/record-tab";
 import { RightInspector } from "@/boson/workspace/views/right-inspector";
+import { formatRowLabel, getRowByPk } from "@/boson/fake-domain";
 
 export function WorkspaceView() {
-  const { tabs, activeTabId, activeTab, setActiveTabId, closeTab, goBack, setSelection, inspectorOpen } =
+  const { tabs, activeTabId, activeTab, setActiveTabId, closeTab, goBack, setSelection, inspectorOpen, domain } =
     useWorkspace();
   const active = activeTab;
 
@@ -28,7 +29,7 @@ export function WorkspaceView() {
   return (
     <div className="flex h-[calc(100dvh-2.25rem)] min-h-0 w-full">
       <div className={cn("flex min-w-0 flex-1 flex-col", inspectorOpen ? "border-r" : "")}>
-        <div className="flex items-center gap-1 border-b bg-background px-2 py-1">
+        <div className="flex items-center gap-1 border-b bg-workspace/70 px-2 py-1.5">
           <Button
             type="button"
             variant="ghost"
@@ -44,23 +45,42 @@ export function WorkspaceView() {
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto">
             {tabs.map((t) => {
               const isActive = t.id === activeTabId;
+              const icon =
+                t.spec.kind === "schema" ? (
+                  <IconGraph className="size-3.5 shrink-0" />
+                ) : t.spec.kind === "table" ? (
+                  <IconTable className="size-3.5 shrink-0" />
+                ) : (
+                  <IconFileText className="size-3.5 shrink-0" />
+                );
+
+              let label = t.title;
+              if (t.spec.kind === "table") label = t.spec.table;
+              if (t.spec.kind === "record") {
+                const row = getRowByPk(domain, t.spec.table, t.spec.pk);
+                label = row ? formatRowLabel(domain, t.spec.table, row) : `${t.spec.table} · ${String(t.spec.pk)}`;
+              }
               return (
                 <button
                   key={t.id}
                   type="button"
                   className={cn(
-                    "group inline-flex max-w-[240px] shrink-0 items-center gap-2 rounded-md border px-2 py-1 text-xs",
+                    "group inline-flex max-w-[320px] shrink-0 items-center gap-2 rounded-md px-2.5 py-1.5 text-xs transition-colors",
                     isActive
-                      ? "border-border bg-muted text-foreground"
-                      : "border-transparent bg-transparent text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                      ? "bg-selected/50 text-foreground shadow-xs ring-1 ring-border"
+                      : "bg-transparent text-muted-foreground hover:bg-muted/50 hover:text-foreground",
                   )}
                   onClick={() => setActiveTabId(t.id)}
                 >
-                  <span className="truncate">{t.title}</span>
+                  <span className={cn("text-muted-foreground", isActive ? "text-foreground" : "")}>{icon}</span>
+                  <span className="truncate">{label}</span>
                   <span
                     role="button"
                     tabIndex={0}
-                    className="rounded p-0.5 opacity-0 hover:bg-background/60 group-hover:opacity-100"
+                    className={cn(
+                      "rounded p-0.5 hover:bg-background/60",
+                      isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                    )}
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
@@ -83,7 +103,7 @@ export function WorkspaceView() {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-auto">
+        <div className="min-h-0 flex-1 overflow-auto bg-background">
           {active?.spec.kind === "schema" ? <SchemaTabView /> : null}
           {active?.spec.kind === "table" ? <TableTabView table={active.spec.table} /> : null}
           {active?.spec.kind === "record" ? (

@@ -6,7 +6,9 @@ import {
   IconFileText,
   IconLayoutDashboard,
   IconLayoutSidebarRight,
+  IconPlugConnected,
   IconTable,
+  IconClock,
   IconX,
 } from "@tabler/icons-react";
 
@@ -42,6 +44,10 @@ export function CommandPalette() {
     openRecord,
     toggleInspector,
     setSelection,
+    recents,
+    connection,
+    openConnectDialog,
+    disconnect,
     commandPaletteOpen,
     setCommandPaletteOpen,
     openCommandPalette,
@@ -67,6 +73,7 @@ export function CommandPalette() {
     const hits: RecordHit[] = [];
     for (const table of Object.keys(domain.tables) as TableName[]) {
       const schema = domain.tables[table];
+      if (!schema.primaryKey) continue;
       for (const row of domain.rows[table]) {
         const pk = row[schema.primaryKey];
         hits.push({
@@ -120,6 +127,60 @@ export function CommandPalette() {
               <IconLayoutSidebarRight />
               Toggle Inspector
             </CommandItem>
+            <CommandItem
+              onSelect={async () => {
+                closeCommandPalette();
+                if (connection.status === "connected") {
+                  disconnect();
+                  return;
+                }
+                openConnectDialog();
+              }}
+            >
+              <IconPlugConnected />
+              {connection.status === "connected" ? "Disconnect Postgres" : "Connect to Postgres…"}
+              <CommandShortcut>⌘,</CommandShortcut>
+            </CommandItem>
+          </CommandGroup>
+
+          <CommandSeparator />
+
+          <CommandGroup heading="Recent">
+            {recents.length === 0 ? (
+              <CommandItem disabled>
+                <IconClock />
+                No recent items yet
+              </CommandItem>
+            ) : (
+              recents.slice(0, 8).map((r) => (
+                <CommandItem
+                  key={`${r.kind}:${r.kind === "table" ? r.table : `${r.table}:${String(r.pk)}`}`}
+                  onSelect={() => {
+                    if (r.kind === "table") {
+                      setSelection({ kind: "table", table: r.table });
+                      openTable(r.table, { newTab: openInNewTabRef.current });
+                    } else {
+                      setSelection({ kind: "record", table: r.table, pk: r.pk });
+                      openRecord(r.table, r.pk, { newTab: openInNewTabRef.current });
+                    }
+                    closeCommandPalette();
+                  }}
+                  onMouseDown={(e) => {
+                    openInNewTabRef.current = Boolean(e.metaKey || e.ctrlKey);
+                  }}
+                >
+                  {r.kind === "table" ? <IconTable /> : <IconFileText />}
+                  <span className="truncate">
+                    {r.kind === "table" ? (
+                      <span className="font-mono">{r.table}</span>
+                    ) : (
+                      <span className="font-mono">{r.table}</span>
+                    )}
+                  </span>
+                  <CommandShortcut>⌘↵</CommandShortcut>
+                </CommandItem>
+              ))
+            )}
           </CommandGroup>
 
           <CommandSeparator />

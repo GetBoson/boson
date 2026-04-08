@@ -42,10 +42,33 @@ function newTabIntent(e: React.MouseEvent | React.KeyboardEvent): boolean {
 }
 
 export function RecordTabView({ table, pk }: { table: TableName; pk: unknown }) {
-  const { domain, openRecord, openTable, navigateActive, setSelection } = useWorkspace();
+  const {
+    domain,
+    openRecord,
+    openTable,
+    navigateActive,
+    setSelection,
+    activeTabId,
+    activeTab,
+    setTabUi,
+    connection,
+    recordState,
+    recordError,
+    fetchRecordByPk,
+  } = useWorkspace();
   const row = getRowByPk(domain, table, pk);
   const schema = domain.tables[table];
-  const [viewMode, setViewMode] = React.useState<"list" | "trail">("list");
+  const viewMode = activeTab?.ui?.recordViewMode ?? "list";
+  const rKey = `${table}:${String(pk)}`;
+
+  React.useEffect(() => {
+    if (row) return;
+    if (connection.status !== "connected") return;
+    if (!schema) return;
+    const state = recordState[rKey] ?? "idle";
+    if (state !== "idle") return;
+    void fetchRecordByPk(table, pk);
+  }, [connection.status, fetchRecordByPk, pk, rKey, recordState, row, schema, table]);
 
   const outgoing: Related[] = React.useMemo(() => {
     if (!row) return [];
@@ -71,7 +94,9 @@ export function RecordTabView({ table, pk }: { table: TableName; pk: unknown }) 
       const fromRows = domain.rows[fk.fromTable].filter((r) => r[fk.fromColumn] === pk);
       for (const r of fromRows) {
         const fromSchema = domain.tables[fk.fromTable];
+        if (!fromSchema?.primaryKey) continue;
         const fromPk = r[fromSchema.primaryKey];
+        if (fromPk == null) continue;
         rel.push({
           label: `${fk.fromTable} row`,
           table: fk.fromTable,
@@ -83,7 +108,71 @@ export function RecordTabView({ table, pk }: { table: TableName; pk: unknown }) 
     return rel;
   }, [domain, pk, row, table]);
 
+  if (!schema) {
+    return (
+      <div className="p-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Table not found</CardTitle>
+          </CardHeader>
+          <CardContent className="text-xs text-muted-foreground">
+            This tab references <span className="font-mono">{table}</span>, but it doesn’t exist in the current schema.
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!schema.primaryKey) {
+    return (
+      <div className="p-4">
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Unsupported table</CardTitle>
+          </CardHeader>
+          <CardContent className="text-xs text-muted-foreground">
+            <div>
+              <span className="font-mono">{table}</span> doesn’t have a supported single-column primary key yet (v1
+              limitation).
+            </div>
+            <div className="mt-2">Record tabs require a primary key so Boson can anchor traversal and identity.</div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (!row) {
+    if (connection.status === "connected") {
+      const state = recordState[rKey] ?? "idle";
+      const err = recordError[rKey];
+      return (
+        <div className="p-4">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-sm">
+                {state === "loading" ? "Loading record…" : state === "error" ? "Load failed" : "Record not found"}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-xs text-muted-foreground">
+              {state === "loading" ? (
+                <>
+                  Fetching <span className="font-mono">{table}</span> by primary key{" "}
+                  <span className="font-mono">{schema.primaryKey}</span>.
+                </>
+              ) : state === "error" ? (
+                <span className="text-destructive">{err ?? "Failed to load record."}</span>
+              ) : (
+                <>
+                  No row matched <span className="font-mono">{schema.primaryKey}</span> ={" "}
+                  <span className="font-mono">{String(pk)}</span>.
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      );
+    }
     return (
       <div className="p-4">
         <Card>
@@ -100,6 +189,27 @@ export function RecordTabView({ table, pk }: { table: TableName; pk: unknown }) 
 
   const recordLabel = formatRowLabel(domain, table, row);
 
+  const breadcrumb = React.useMemo(() => {
+    // Pull a readable “recent path” from tab history.
+    // We use table names to keep it compact (and stable across record IDs).
+    const hist = activeTab?.history ?? [];
+    const tables: string[] = [];
+    for (const s of hist) {
+      if (s.kind === "table") tables.push(s.table);
+      if (s.kind === "record") tables.push(s.table);
+    }
+    // Collapse consecutive duplicates.
+    const collapsed = tables.filter((t, i) => i === 0 || t !== tables[i - 1]);
+    // Keep the tail of the path and ensure current table appears at the end.
+    const withCurrent =
+      collapsed.length === 0 || collapsed[collapsed.length - 1] !== table
+        ? [...collapsed, table]
+        : collapsed;
+    const max = 4;
+    if (withCurrent.length <= max) return withCurrent;
+    return ["…", ...withCurrent.slice(-max + 1)];
+  }, [activeTab?.history, table]);
+
   return (
     <div className="p-4">
       <div className="mb-4 flex items-start justify-between gap-4">
@@ -108,6 +218,14 @@ export function RecordTabView({ table, pk }: { table: TableName; pk: unknown }) 
             Record <span className="font-mono">{table}</span>
           </div>
           <div className="truncate text-lg font-semibold tracking-tight">{recordLabel}</div>
+          <div className="mt-1 flex flex-wrap items-center gap-1 text-[0.7rem] text-muted-foreground">
+            {breadcrumb.map((t, i) => (
+              <span key={`${t}-${i}`} className={t === "…" ? "" : "font-mono"}>
+                {t}
+                {i < breadcrumb.length - 1 ? <span className="px-1 text-muted-foreground">→</span> : null}
+              </span>
+            ))}
+          </div>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
             <Badge variant="secondary" className="font-mono">
               {schema.primaryKey}
@@ -130,7 +248,7 @@ export function RecordTabView({ table, pk }: { table: TableName; pk: unknown }) 
               variant={viewMode === "list" ? "secondary" : "ghost"}
               size="sm"
               className="h-7 px-2"
-              onClick={() => setViewMode("list")}
+              onClick={() => setTabUi(activeTabId, { recordViewMode: "list" })}
             >
               <IconList className="mr-2 size-4" />
               List
@@ -140,7 +258,7 @@ export function RecordTabView({ table, pk }: { table: TableName; pk: unknown }) 
               variant={viewMode === "trail" ? "secondary" : "ghost"}
               size="sm"
               className="h-7 px-2"
-              onClick={() => setViewMode("trail")}
+              onClick={() => setTabUi(activeTabId, { recordViewMode: "trail" })}
             >
               <IconArrowsLeftRight className="mr-2 size-4" />
               Trail
@@ -270,6 +388,11 @@ function RecordTrailView({
                     <div className="mt-0.5 truncate font-mono text-[0.7rem] text-muted-foreground">
                       {schema.primaryKey}: {String(r.pk)}
                     </div>
+                    {r.via ? (
+                      <div className="mt-1 truncate font-mono text-[0.65rem] text-muted-foreground">
+                        {r.via}
+                      </div>
+                    ) : null}
                   </button>
                 );
               })
@@ -307,6 +430,11 @@ function RecordTrailView({
                     <div className="mt-0.5 truncate font-mono text-[0.7rem] text-muted-foreground">
                       {schema.primaryKey}: {String(r.pk)}
                     </div>
+                    {r.via ? (
+                      <div className="mt-1 truncate font-mono text-[0.65rem] text-muted-foreground">
+                        {r.via}
+                      </div>
+                    ) : null}
                   </button>
                 );
               })

@@ -1,12 +1,6 @@
-export type TableName =
-  | "users"
-  | "organizations"
-  | "memberships"
-  | "subscriptions"
-  | "invoices"
-  | "events";
+export type TableName = string;
 
-export type ColumnType = "uuid" | "text" | "int" | "bool" | "timestamp" | "json";
+export type ColumnType = string;
 
 export type Column = {
   name: string;
@@ -25,7 +19,7 @@ export type ForeignKey = {
 export type TableSchema = {
   name: TableName;
   label: string;
-  primaryKey: string;
+  primaryKey: string | null;
   columns: Column[];
 };
 
@@ -286,17 +280,28 @@ export function createFakeDomain(): FakeDomain {
 
 export function getRowByPk(domain: FakeDomain, table: TableName, pk: unknown): Row | undefined {
   const schema = domain.tables[table];
-  return domain.rows[table].find((r) => r[schema.primaryKey] === pk);
+  if (!schema?.primaryKey) return undefined;
+  return domain.rows[table].find((r) => r[schema.primaryKey!] === pk);
 }
 
 export function formatRowLabel(domain: FakeDomain, table: TableName, row: Row): string {
-  const pk = row[domain.tables[table].primaryKey];
-  if (table === "users") return `${row.name ?? "User"} (${row.email ?? pk ?? "—"})`;
-  if (table === "organizations") return `${row.name ?? "Organization"} (${row.plan ?? "—"})`;
-  if (table === "invoices")
-    return `${row.id ?? pk ?? "Invoice"} — ${row.status ?? "—"} $${Number(row.amount_cents ?? 0) / 100}`;
-  if (table === "subscriptions") return `${row.status ?? "subscription"} (${row.id ?? pk ?? "—"})`;
-  if (table === "events") return `${row.type ?? "event"} (${row.id ?? pk ?? "—"})`;
+  const pkCol = domain.tables[table]?.primaryKey ?? null;
+  const pk = pkCol ? row[pkCol] : undefined;
+  // Friendly heuristics for arbitrary Postgres tables.
+  const pick = (...keys: string[]) => {
+    for (const k of keys) {
+      const v = row[k];
+      if (typeof v === "string" && v.trim()) return v;
+      if (typeof v === "number" || typeof v === "boolean") return String(v);
+    }
+    return null;
+  };
+
+  const nameish = pick("name", "title", "email", "username", "slug", "type", "status");
+  const secondary = pick("code", "plan", "state", "kind");
+  if (nameish && secondary) return `${nameish} (${secondary})`;
+  if (nameish) return `${nameish}`;
+
   return `${table} (${pk ?? "—"})`;
 }
 

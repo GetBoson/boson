@@ -5,6 +5,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { WorkspaceProvider } from "@/boson/workspace/workspace-context";
 import { CommandPalette } from "@/boson/command-palette";
+import { ConnectDialog } from "@/boson/connect-dialog";
 
 type Props = {
   children: ReactNode;
@@ -17,6 +18,7 @@ export function AppLayout({ children }: Props) {
         <WorkspaceProvider>
           <Titlebar />
           <CommandPalette />
+          <ConnectDialog />
           <AppSidebar />
           <SidebarInset className="pt-9">{children}</SidebarInset>
         </WorkspaceProvider>
