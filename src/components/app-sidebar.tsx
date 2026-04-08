@@ -9,9 +9,14 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { IconDatabase, IconGraph, IconHistory, IconSearch } from "@tabler/icons-react";
+import { IconBox, IconGraph, IconTable } from "@tabler/icons-react";
+import { useWorkspace } from "@/boson/workspace/workspace-context";
+import type { TableName } from "@/boson/fake-domain";
 
 export function AppSidebar() {
+  const { domain, openSchema, openTable, setSelection } = useWorkspace();
+  const tableNames = Object.keys(domain.tables) as TableName[];
+
   return (
     <Sidebar side="left" variant="sidebar" collapsible="icon">
       <SidebarHeader>
@@ -26,27 +31,54 @@ export function AppSidebar() {
           <SidebarGroupContent>
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton>
-                  <IconDatabase />
-                  <span>Connections</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton>
-                  <IconSearch />
-                  <span>Explore</span>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton>
+                <SidebarMenuButton
+                  onClick={() => {
+                    setSelection({ kind: "none" });
+                    openSchema();
+                  }}
+                >
                   <IconGraph />
-                  <span>Graph</span>
+                  <span>Schema</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>Tables</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {tableNames.map((t) => (
+                <SidebarMenuItem key={t}>
+                  <SidebarMenuButton
+                    onClick={() => {
+                      setSelection({ kind: "table", table: t });
+                      openTable(t);
+                    }}
+                  >
+                    <IconTable />
+                    <span>{t}</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        <SidebarGroup>
+          <SidebarGroupLabel>v1 story</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <div className="px-3 py-2 text-xs text-muted-foreground">
+              Explore relational data through <span className="font-mono">schema</span>,{" "}
+              <span className="font-mono">tables</span>, and connected{" "}
+              <span className="font-mono">records</span>.
+            </div>
+            <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton>
-                  <IconHistory />
-                  <span>History</span>
+                <SidebarMenuButton onClick={() => openSchema({ newTab: true })}>
+                  <IconBox />
+                  <span>Open Schema in new tab</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             </SidebarMenu>
